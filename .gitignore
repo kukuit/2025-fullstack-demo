@@ -1,0 +1,9 @@
+# Backend runtime / build
+flatform-backend/node_modules/
+flatform-backend/dist/
+flatform-backend/storage/
+flatform-backend/storage/**/*
+flatform-backend/.env
+flatform-backend/.env.*
+!flatform-backend/.env.example
+!flatform-backend/.env.production.example

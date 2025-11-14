@@ -44,17 +44,17 @@ export class AuthController {
     // Set cookies
     res.cookie('token', result.accessToken, {
       httpOnly: true,
-      secure: false,
+      secure: true,
       // maxAge: 10 * 1000,  // test 10s
       maxAge: 1 * 60 * 60 * 1000,
-      sameSite: 'lax',
+      sameSite: 'none',
     });
 
     res.cookie('refreshToken', result.refreshToken, {
       httpOnly: true,
-      secure: false,
+      secure: true,
       maxAge: 7 * 24 * 60 * 60 * 1000,
-      sameSite: 'lax',
+      sameSite: 'none',
     });
 
     const redirect = result.user.redirectUrl || '/';
@@ -78,17 +78,17 @@ export class AuthController {
 
     res.cookie('token', result.accessToken, {
       httpOnly: true,
-      secure: false,
+      secure: true,
       // maxAge: 10 * 1000,  // test 10s
       maxAge: 1 * 60 * 60 * 1000,
-      sameSite: 'lax',
+      sameSite: 'none',
     });
 
     res.cookie('refreshToken', result.refreshToken, {
       httpOnly: true,
-      secure: false,
+      secure: true,
       maxAge: 7 * 24 * 60 * 60 * 1000,
-      sameSite: 'lax',
+      sameSite: 'none',
     });
 
     return res.json({ message: 'Token đã được làm mới' });
@@ -139,12 +139,12 @@ export class AuthController {
     res.clearCookie('token', {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
+      sameSite: 'none',
     });
     res.clearCookie('refreshToken', {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
+      sameSite: 'none',
     });
 
     return this.authService.logout(userId);

@@ -12,7 +12,7 @@ import * as compression from 'compression';
 function parseOrigins(env?: string) {
   return (env ?? '')
     .split(',')
-    .map(s => s.trim())
+    .map((s) => s.trim())
     .filter(Boolean);
 }
 
@@ -32,10 +32,18 @@ async function bootstrap() {
   // prefix chung
   app.setGlobalPrefix('api');
 
-  // CORS
-  const origins = parseOrigins(process.env.ALLOWED_ORIGINS);
+  // ===== CORS =====
+  // .env của bạn:
+  // ALLOWED_ORIGINS=https://2025-fullstack-demo.vercel.app,http://localhost:3000
+  const allowedFromEnv = parseOrigins(process.env.ALLOWED_ORIGINS);
+  const defaultOrigins = [
+    'https://2025-fullstack-demo.vercel.app',
+    'http://localhost:3000',
+  ];
+  const origins = allowedFromEnv.length ? allowedFromEnv : defaultOrigins;
+
   app.enableCors({
-    origin: origins.length ? origins : undefined,
+    origin: origins, // cho phép 2 origin này
     credentials: true,
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
     allowedHeaders: 'Content-Type,Authorization,X-Requested-With',
@@ -52,7 +60,17 @@ async function bootstrap() {
 
   // Static
   const STORAGE_DIR = process.env.STORAGE_DIR || 'storage';
-  app.use('/assets', express.static(join(process.cwd(), STORAGE_DIR)));
+  app.use(
+    '/assets',
+    express.static(join(process.cwd(), STORAGE_DIR), {
+      setHeaders: (res) => {
+        // Cho phép dùng ảnh từ domain khác (frontend)
+        res.setHeader('Access-Control-Allow-Origin', '*');
+        // Tránh lỗi NotSameOrigin khi load image trong <img> / canvas
+        res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+      },
+    }),
+  );
 
   const port = Number(process.env.PORT || 4000);
   await app.listen(port);
