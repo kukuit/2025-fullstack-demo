@@ -1,113 +1,108 @@
+// users/users.controller.ts
 import {
   Body,
   Controller,
   Delete,
   Get,
-  Param,
-  Post,
-  Put,
-  Patch,
-  BadRequestException,
-  ParseIntPipe,
-  Query,
-  DefaultValuePipe,
   HttpCode,
   HttpStatus,
+  NotFoundException,
+  Param,
+  Patch,
+  Post,
+  Put,
+  Query,
 } from '@nestjs/common';
+import {
+  ApiBearerAuth,
+  ApiCreatedResponse,
+  ApiForbiddenResponse,
+  ApiNoContentResponse,
+  ApiNotFoundResponse,
+  ApiOkResponse,
+  ApiOperation,
+  ApiTags,
+  ApiUnauthorizedResponse,
+} from '@nestjs/swagger';
 import { UsersService } from './users.service';
-import { CreateUserDto } from './dto/create-user.dto';
-import { UpdateUserDto } from './dto/update-user.dto';
-import { SearchUsersDto } from './dto/search-users.dto';
+import {
+  CreateUserDto,
+  PaginatedResponse,
+  SearchUsersDto,
+  UpdateUserDto,
+  UserEntity,
+  UserStatus,
+} from './users.dto';
 import { Roles } from '@/common/decorators/roles.decorator';
-import { ApiTags, ApiOperation, ApiQuery, ApiResponse } from '@nestjs/swagger';
 
 @ApiTags('Users')
+@ApiBearerAuth()
+@ApiUnauthorizedResponse({ description: 'Unauthorized' })
+@ApiForbiddenResponse({ description: 'Forbidden' })
 @Controller('admin/users')
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
   @Roles('admin')
   @Get()
-  @ApiOperation({ summary: 'Get all users with pagination' })
-  @ApiQuery({ name: 'page', required: false, example: 1 })
-  @ApiQuery({ name: 'limit', required: false, example: 10 })
-  @ApiResponse({ status: 200, description: 'List of users with pagination' })
-  async findAll(
-    @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
-    @Query('limit', new DefaultValuePipe(10), ParseIntPipe) limit: number,
-  ) {
-    return this.usersService.getAllUsers({ page, limit });
+  @ApiOperation({ summary: 'List users (paginated + filters)' })
+  @ApiOkResponse({ type: PaginatedResponse<UserEntity> as any })
+  async list(@Query() query: SearchUsersDto) {
+    return this.usersService.searchAllUsers(query);
   }
 
   @Roles('admin')
   @Get(':id')
-  @ApiOperation({ summary: 'Get user by ID' })
-  @ApiResponse({ status: 200, description: 'User found' })
-  @ApiResponse({ status: 404, description: 'User not found' })
-  async findById(@Param('id') id: string) {
-    return this.usersService.getUserById(id);
+  @ApiOperation({ summary: 'Get user by id' })
+  @ApiOkResponse({ type: UserEntity })
+  @ApiNotFoundResponse({ description: 'User not found' })
+  async getById(@Param('id') id: string) {
+    const user = await this.usersService.getUserByIdSafe(id);
+    if (!user) throw new NotFoundException('User not found');
+    return user;
   }
 
   @Roles('admin')
   @Post()
-  @ApiOperation({ summary: 'Create new user' })
-  @ApiResponse({ status: 201, description: 'User created' })
+  @ApiOperation({ summary: 'Create user' })
+  @ApiCreatedResponse({ type: UserEntity })
   async create(@Body() dto: CreateUserDto) {
-    return this.usersService.createUser(dto);
+    return this.usersService.create(dto);
   }
 
   @Roles('admin')
   @Put(':id')
-  @ApiOperation({ summary: 'Update user info' })
-  @ApiResponse({ status: 200, description: 'User updated' })
-  async update(@Param('id') id: string, @Body() dto: UpdateUserDto) {
-    return this.usersService.updateUser(id, dto);
+  @ApiOperation({ summary: 'Update user (replace)' })
+  @ApiOkResponse({ type: UserEntity })
+  async replace(@Param('id') id: string, @Body() dto: UpdateUserDto) {
+    return this.usersService.update(id, dto);
+  }
+
+  @Roles('admin')
+  @Patch(':id')
+  @ApiOperation({ summary: 'Update user (partial)' })
+  @ApiOkResponse({ type: UserEntity })
+  async patch(@Param('id') id: string, @Body() dto: UpdateUserDto) {
+    return this.usersService.update(id, dto);
   }
 
   @Roles('admin')
   @Delete(':id')
+  @ApiOperation({ summary: 'Soft delete user' })
   @HttpCode(HttpStatus.NO_CONTENT)
-  @ApiOperation({ summary: 'Soft delete (disable) user' })
-  @ApiResponse({ status: 204, description: 'User soft deleted' })
+  @ApiNoContentResponse({ description: 'Soft deleted' })
   async softDelete(@Param('id') id: string) {
-    return this.usersService.disableUser(id);
+    await this.usersService.softDelete(id);
   }
 
   @Roles('admin')
   @Patch(':id/status')
-  @ApiOperation({ summary: 'Update user status (active/disable)' })
-  @ApiResponse({ status: 200, description: 'User status updated' })
-  async updateStatus(
+  @ApiOperation({ summary: 'Change user status' })
+  @ApiOkResponse({ type: UserEntity })
+  async changeStatus(
     @Param('id') id: string,
-    @Body('status') status: 'active' | 'disable',
+    @Body() body: { status: UserStatus },
   ) {
-    if (!['active', 'disable'].includes(status)) {
-      throw new BadRequestException('Invalid status');
-    }
-
-    return this.usersService.updateStatus(id, status);
-  }
-
-  @Roles('admin')
-  @Get('filter/search')
-  @ApiOperation({ summary: 'Get all users with filters and pagination' })
-  @ApiQuery({
-    name: 'status',
-    required: false,
-    enum: ['all', 'active', 'disable'],
-    example: 'all',
-  })
-  @ApiQuery({ name: 'email', required: false, example: 'abc@example.com' })
-  @ApiQuery({ name: 'page', required: false, example: 1 })
-  @ApiQuery({ name: 'limit', required: false, example: 10 })
-  @ApiResponse({ status: 200, description: 'Filtered users with pagination' })
-  async searchAllUsers(@Query() query: SearchUsersDto) {
-    const { page, limit, status, email } = query;
-    return this.usersService.searchAllUsers({
-      page: Number(page),
-      limit: Number(limit),
-      status,
-      email,
-    });
+    return this.usersService.setStatus(id, body.status);
   }
 }
