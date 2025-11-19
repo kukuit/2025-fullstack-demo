@@ -22,7 +22,15 @@ async function bootstrap() {
   // bảo mật/hiệu năng (bật khi prod)
   if (process.env.NODE_ENV === 'production') {
     app.set('trust proxy', 1); // chạy sau Apache/Nginx
-    app.use(helmet());
+
+    // FIX NotSameOrigin: nới lỏng CORP, tắt COEP
+    app.use(
+      helmet({
+        crossOriginResourcePolicy: { policy: 'cross-origin' },
+        crossOriginEmbedderPolicy: false,
+      }),
+    );
+
     app.use(compression());
   }
 
@@ -33,7 +41,7 @@ async function bootstrap() {
   app.setGlobalPrefix('api');
 
   // ===== CORS =====
-  // .env của bạn:
+  // .env:
   // ALLOWED_ORIGINS=https://2025-fullstack-demo.vercel.app,http://localhost:3000
   const allowedFromEnv = parseOrigins(process.env.ALLOWED_ORIGINS);
   const defaultOrigins = [
@@ -58,17 +66,30 @@ async function bootstrap() {
     .build();
   SwaggerModule.setup('docs', app, SwaggerModule.createDocument(app, cfg));
 
-  // Static
+  // ===== Static (storage + assets) =====
   const STORAGE_DIR = process.env.STORAGE_DIR || 'storage';
+  const storagePath = join(process.cwd(), STORAGE_DIR);
+
+  const setStaticHeaders = (res: express.Response) => {
+    // Cho phép dùng ảnh từ domain khác (frontend)
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    // Tránh lỗi NotSameOrigin khi load image trong <img> / canvas
+    res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+  };
+
+  // Ảnh thumbnail, tmp, v.v... dùng /storage
+  app.use(
+    '/storage',
+    express.static(storagePath, {
+      setHeaders: setStaticHeaders,
+    }),
+  );
+
+  // Alias /assets -> cùng thư mục (cho email/editor nếu dùng /assets/...)
   app.use(
     '/assets',
-    express.static(join(process.cwd(), STORAGE_DIR), {
-      setHeaders: (res) => {
-        // Cho phép dùng ảnh từ domain khác (frontend)
-        res.setHeader('Access-Control-Allow-Origin', '*');
-        // Tránh lỗi NotSameOrigin khi load image trong <img> / canvas
-        res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
-      },
+    express.static(storagePath, {
+      setHeaders: setStaticHeaders,
     }),
   );
 
