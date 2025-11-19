@@ -1,174 +1,188 @@
+// users/users.service.ts
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { UsersRepository } from './users.repository';
-import { CreateUserDto, UpdateUserDto } from './dto';
 import * as bcrypt from 'bcrypt';
-import { PrismaService } from '@/prisma/prisma.service';
 import { ulid } from 'ulid';
+import {
+  CreateUserDto,
+  PaginatedResponse,
+  SearchUsersDto,
+  UpdateUserDto,
+  UserEntity,
+  UserStatus,
+} from './users.dto';
+import { UsersRepository } from './users.repository';
 
 @Injectable()
 export class UsersService {
-  constructor(
-    private readonly usersRepo: UsersRepository,
-    private readonly prisma: PrismaService,
-  ) {}
+  constructor(private readonly repo: UsersRepository) {}
 
-  async getUserById(id: string) {
-    const user = await this.usersRepo.findById(id);
-    if (!user) throw new NotFoundException('User not found');
-    return user;
+  private stripSensitive = (u: any): UserEntity => {
+    if (!u) return u;
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { password, ...safe } = u;
+    return safe as UserEntity;
+  };
+
+  async getUserByIdSafe(id: string): Promise<UserEntity | null> {
+    const user = await this.repo.findById(id);
+    return user ? this.stripSensitive(user) : null;
   }
 
-  async getUserByEmail(email: string) {
-    return this.usersRepo.findByEmail(email);
-  }
+  async create(dto: CreateUserDto): Promise<UserEntity> {
+    const hash = await bcrypt.hash(dto.password, 10);
 
-  async getAllUsers({ page, limit }: { page: number; limit: number }) {
-    const whereCondition = { status: { in: ['active', 'disable'] } };
+    // 1) Sinh ULID cho user (và sẽ dùng lại cho profile)
+    const id = ulid();
 
-    const [data, total] = await this.prisma.$transaction([
-      this.prisma.users.findMany({
-        skip: (page - 1) * limit,
-        take: limit,
-        include: {
-          profile: true,
-          role: true,
-        },
-        where: whereCondition,
-        orderBy: { createdAt: 'desc' },
-      }),
-      this.prisma.users.count({ where: whereCondition }),
-    ]);
-
-    return {
-      data,
-      total,
-      page,
-      limit,
-      totalPages: Math.ceil(total / limit),
-    };
-  }
-
-  async createUser(dto: CreateUserDto) {
-    const hashedPassword = await bcrypt.hash(dto.password, 10);
-
-    return this.usersRepo.createUser({
-      id: ulid(),
+    // 1) Tạo Users
+    const createdUser = await this.repo.create({
+      id,
       email: dto.email,
-      password: hashedPassword,
-      roleId: Number(dto.role),
-      status: 'active',
-      profile: {
-        create: {
-          id: ulid(),
-          name: dto.name ?? '',
-          phone: dto.phone ?? null,
-          avatar: dto.avatar ?? null,
-          gender: dto.gender ?? null,
-          dob: dto.dob ? new Date(dto.dob) : null,
-          status: 'active',
-        },
-      },
+      password: hash,
+      roleId: dto.role,
+      status: UserStatus.ACTIVE,
     });
+
+    // 2) Nếu có payload profile thì tạo Profile (id = user.id; FK userId = user.id)
+    const hasProfilePayload =
+      dto.name || dto.phone || dto.avatar || dto.gender || dto.dob;
+
+    if (hasProfilePayload) {
+      await this.repo.createProfile({
+        id,
+        userId: id,
+        name: dto.name,
+        avatar: dto.avatar,
+        phone: dto.phone,
+        gender: dto.gender,
+        dob: dto.dob ? new Date(dto.dob) : undefined,
+        status: UserStatus.ACTIVE,
+      });
+    }
+
+    // 3) Lấy lại user đầy đủ
+    const full = await this.repo.findById(id);
+    return this.stripSensitive(full);
   }
 
-  async updateUser(id: string, dto: UpdateUserDto) {
-    const user = await this.usersRepo.findById(id);
-    if (!user) throw new NotFoundException('User not found');
+  async update(id: string, dto: UpdateUserDto): Promise<UserEntity> {
+    // 1) Build data cập nhật Users
+    const data: any = {};
+    if (dto.email !== undefined) data.email = dto.email;
+    if (dto.password) data.password = await bcrypt.hash(dto.password, 10);
+    if (dto.role !== undefined) data.roleId = dto.role;
+    if (dto.status !== undefined) data.status = dto.status;
 
-    const updateData: any = {
-      roleId: dto.role ? Number(dto.role) : undefined,
-      profile: {
-        update: {
+    if (Object.keys(data).length > 0) {
+      await this.repo.update(id, data);
+    }
+
+    // 2) Nếu có payload profile thì upsert theo userId
+    const hasProfilePayload =
+      dto.name !== undefined ||
+      dto.phone !== undefined ||
+      dto.avatar !== undefined ||
+      dto.gender !== undefined ||
+      dto.dob !== undefined ||
+      dto.status !== undefined;
+
+    if (hasProfilePayload) {
+      await this.repo.upsertProfileByUserId(id, {
+        create: {
+          id,
+          userId: id,
           name: dto.name,
           phone: dto.phone,
           avatar: dto.avatar,
           gender: dto.gender,
           dob: dto.dob ? new Date(dto.dob) : undefined,
+          status: dto.status ?? UserStatus.ACTIVE,
         },
-      },
-    };
-
-    if (dto.password) {
-      updateData.password = await bcrypt.hash(dto.password, 10);
-    }
-
-    return this.usersRepo.updateUser(id, updateData);
-  }
-
-  async disableUser(id: string) {
-    const user = await this.usersRepo.findById(id);
-    if (!user) throw new NotFoundException('User not found');
-
-    return this.usersRepo.updateUser(id, {
-      status: 'disable',
-      profile: {
         update: {
-          status: 'disable',
+          ...(dto.name !== undefined ? { name: dto.name } : {}),
+          ...(dto.phone !== undefined ? { phone: dto.phone } : {}),
+          ...(dto.avatar !== undefined ? { avatar: dto.avatar } : {}),
+          ...(dto.gender !== undefined ? { gender: dto.gender } : {}),
+          ...(dto.dob !== undefined
+            ? { dob: dto.dob ? new Date(dto.dob) : null }
+            : {}),
+          ...(dto.status !== undefined ? { status: dto.status } : {}),
         },
-      },
-    });
+      });
+    }
+
+    const full = await this.repo.findById(id);
+    if (!full) throw new NotFoundException('User not found');
+    return this.stripSensitive(full);
   }
 
-  async updateStatus(id: string, status: 'active' | 'disable') {
-    const user = await this.usersRepo.findById(id);
+  async softDelete(id: string): Promise<void> {
+    const user = await this.repo.findById(id);
     if (!user) throw new NotFoundException('User not found');
 
-    return this.usersRepo.updateUser(id, {
-      status,
-      profile: {
-        update: { status },
-      },
-    });
+    await this.repo.update(id, { status: UserStatus.DISABLED });
+    await this.repo.updateProfileStatusByUserId(id, UserStatus.DISABLED);
   }
 
-  async searchAllUsers({
-    page,
-    limit,
-    email,
-    status,
-  }: {
-    page: number;
-    limit: number;
-    email?: string;
-    status?: 'all' | 'active' | 'disable';
-  }) {
-    const whereCondition: any = {};
+  async setStatus(id: string, status: UserStatus): Promise<UserEntity> {
+    const user = await this.repo.findById(id);
+    if (!user) throw new NotFoundException('User not found');
 
-    // Filter theo status
-    if (status && status !== 'all') {
-      whereCondition.status = status;
-    } else {
-      whereCondition.status = { in: ['active', 'disable'] };
+    await this.repo.update(id, { status });
+    await this.repo.updateProfileStatusByUserId(id, status);
+
+    const full = await this.repo.findById(id);
+    return this.stripSensitive(full);
+  }
+
+  async searchAllUsers(
+    q: SearchUsersDto,
+  ): Promise<PaginatedResponse<UserEntity>> {
+    const {
+      page,
+      limit,
+      status,
+      email,
+      q: text,
+      roleId,
+      sortBy,
+      sortOrder,
+    } = q;
+
+    const where: any = {};
+    if (status && status !== 'all') where.status = status;
+    if (email) where.email = email;
+    if (roleId) where.roleId = roleId;
+    if (text) {
+      where.OR = [
+        { email: { contains: text, mode: 'insensitive' } },
+        { profile: { name: { contains: text, mode: 'insensitive' } } }, // tìm theo profile.name
+      ];
     }
 
-    // Filter theo email (Prisma 6 dùng search thay vì contains + mode)
-    if (email?.trim()) {
-      whereCondition.email = {
-        search: email.trim(),
-      };
-    }
+    const safeLimit = Math.min(Math.max(limit ?? 10, 1), 100);
+    const safePage = Math.max(page ?? 1, 1);
+    const orderBy = [
+      { [sortBy || 'createdAt']: (sortOrder || 'desc').toLowerCase() },
+    ];
 
-    // Truy vấn song song dữ liệu + tổng số lượng
-    const [data, total] = await this.prisma.$transaction([
-      this.prisma.users.findMany({
-        skip: (page - 1) * limit,
-        take: limit,
-        where: whereCondition,
-        orderBy: { createdAt: 'desc' },
-        include: {
-          profile: true,
-          role: true,
-        },
+    const [data, total] = await Promise.all([
+      this.repo.findMany({
+        where,
+        orderBy,
+        skip: (safePage - 1) * safeLimit,
+        take: safeLimit,
+        include: { role: true, profile: true },
       }),
-      this.prisma.users.count({ where: whereCondition }),
+      this.repo.count(where),
     ]);
 
     return {
-      data,
+      data: data.map(this.stripSensitive),
       total,
-      page,
-      limit,
-      totalPages: Math.ceil(total / limit),
+      page: safePage,
+      limit: safeLimit,
+      totalPages: Math.ceil(total / safeLimit),
     };
   }
 }

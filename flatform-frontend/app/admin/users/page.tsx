@@ -31,7 +31,7 @@ export default function UsersPage() {
 
   const fetchUsers = async () => {
     try {
-      const res = await api.get("/admin/users/filter/search", {
+      const res = await api.get("/admin/users", {
         params: {
           status: status !== "all" ? status : undefined,
           email: keyword || undefined,
