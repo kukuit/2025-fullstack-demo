@@ -11,6 +11,7 @@ import { NotedModule } from './modules/noted/noted.module';
 import { UsersModule } from './modules/admin/users/users.module';
 import { EmailTemplateModule } from './modules/admin/email-template/email-template.module';
 import { FilesModule } from './modules/files/files.module';
+import { CustomersModule } from './modules/admin/customers/customers.module';
 
 @Module({
   imports: [
@@ -33,6 +34,7 @@ import { FilesModule } from './modules/files/files.module';
     NotedModule,
     EmailTemplateModule,
     FilesModule,
+    CustomersModule,
   ],
   providers: [
     {

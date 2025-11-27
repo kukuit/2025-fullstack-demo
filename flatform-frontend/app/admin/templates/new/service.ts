@@ -3,6 +3,7 @@ import type {
   CreateEmailTemplatePayload,
   UpdateEmailTemplatePayload,
   EmailTemplate,
+  EmailCustomer,
 } from "./types";
 
 /** CREATE */
@@ -26,4 +27,38 @@ export async function updateEmailTemplate(
 ): Promise<EmailTemplate> {
   const { data } = await api.patch(`/admin/email/templates/${id}`, payload);
   return data;
+}
+
+export interface FetchCustomersParams {
+  q?: string;
+  page?: number;
+  limit?: number;
+}
+
+export interface PaginatedCustomersResponse {
+  data: EmailCustomer[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
+
+export async function fetchCustomersForSelect(
+  params: FetchCustomersParams = {}
+): Promise<EmailCustomer[]> {
+  const { q, page = 1, limit = 50 } = params;
+
+  const { data } = await api.get<PaginatedCustomersResponse>(
+    "/admin/customers",
+    {
+      params: {
+        q: q || undefined,
+        page,
+        limit,
+        status: "all",
+        visibility: "all",
+      },
+    }
+  );
+  return data.data;
 }

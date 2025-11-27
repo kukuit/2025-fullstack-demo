@@ -1,9 +1,12 @@
 "use client";
 
 import { useEffect } from "react";
-import { useFormContext } from "react-hook-form";
+import { useFormContext, Controller } from "react-hook-form"; // 👈 thêm Controller
 import slugify from "slugify";
+import { useQuery } from "@tanstack/react-query";
 import { CurrencyEnum, CURRENCY_OPTIONS } from "../constants";
+import { fetchCustomersForSelect } from "../service";
+import type { EmailCustomer } from "../types";
 
 export default function StepInfo({
   setCurrency,
@@ -12,6 +15,7 @@ export default function StepInfo({
 }) {
   const {
     register,
+    control, // 👈 NEW
     formState: { errors },
     watch,
     setValue,
@@ -46,6 +50,17 @@ export default function StepInfo({
       )}
     </label>
   );
+
+  // Load customers
+  const {
+    data: customers = [],
+    isLoading: isCustomersLoading,
+    isError: isCustomersError,
+  } = useQuery<EmailCustomer[]>({
+    queryKey: ["email-customers", "select"],
+    queryFn: () => fetchCustomersForSelect(),
+    staleTime: 5 * 60 * 1000,
+  });
 
   return (
     <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm space-y-4">
@@ -132,15 +147,41 @@ export default function StepInfo({
         </div>
       </div>
 
+      {/* Customer dùng Controller để chắc giá trị sync đúng */}
       <div>
         <Label>Customer</Label>
-        <input
-          {...register("customerId", {
-            setValueAs: (v) => (v === "" ? null : v),
-          })}
-          className="w-full rounded-lg border px-3 py-2"
-          placeholder="(optional) customer id"
+        <Controller
+          name="customerId"
+          control={control}
+          render={({ field }) => (
+            <select
+              {...field}
+              value={field.value ?? ""} // null -> ""
+              onChange={(e) =>
+                field.onChange(e.target.value === "" ? null : e.target.value)
+              }
+              className="w-full rounded-lg border px-3 py-2"
+              disabled={isCustomersLoading || isCustomersError}
+            >
+              <option value="">(optional) Select customer</option>
+              {customers.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                  {c.email ? ` (${c.email})` : ""}
+                </option>
+              ))}
+            </select>
+          )}
         />
+
+        {isCustomersLoading && (
+          <p className="mt-1 text-xs text-gray-500">Loading customers...</p>
+        )}
+        {isCustomersError && (
+          <p className="mt-1 text-xs text-red-600">
+            Cannot load customers. Please try again.
+          </p>
+        )}
       </div>
 
       <div className="flex items-center gap-2">
