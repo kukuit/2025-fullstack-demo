@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import { useFormContext, Controller } from "react-hook-form"; // 👈 thêm Controller
+import { useFormContext, Controller } from "react-hook-form";
 import slugify from "slugify";
 import { useQuery } from "@tanstack/react-query";
 import { CurrencyEnum, CURRENCY_OPTIONS } from "../constants";
@@ -15,7 +15,7 @@ export default function StepInfo({
 }) {
   const {
     register,
-    control, // 👈 NEW
+    control,
     formState: { errors },
     watch,
     setValue,
@@ -33,6 +33,11 @@ export default function StepInfo({
     });
     setValue("slug", gen, { shouldValidate: true, shouldDirty: true });
   }, [nameValue, setValue]);
+
+  // 🔹 Luôn luôn set hasImages = true (ẩn khỏi UI)
+  useEffect(() => {
+    setValue("hasImages", true, { shouldValidate: false, shouldDirty: false });
+  }, [setValue]);
 
   const Label = ({
     children,
@@ -104,6 +109,44 @@ export default function StepInfo({
         />
       </div>
 
+      {/* 🔹 Customer đưa lên trước Price */}
+      <div>
+        <Label>Customer</Label>
+        <Controller
+          name="customerId"
+          control={control}
+          render={({ field }) => (
+            <select
+              {...field}
+              value={field.value ?? ""} // null -> ""
+              onChange={(e) =>
+                field.onChange(e.target.value === "" ? null : e.target.value)
+              }
+              className="w-full rounded-lg border px-3 py-2"
+              disabled={isCustomersLoading || isCustomersError}
+            >
+              <option value="">Select customer</option>
+              {customers.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                  {c.email ? ` (${c.email})` : ""}
+                </option>
+              ))}
+            </select>
+          )}
+        />
+
+        {isCustomersLoading && (
+          <p className="mt-1 text-xs text-gray-500">Loading customers...</p>
+        )}
+        {isCustomersError && (
+          <p className="mt-1 text-xs text-red-600">
+            Cannot load customers. Please try again.
+          </p>
+        )}
+      </div>
+
+      {/* Price + Currency phía dưới Customer */}
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
         <div>
           <Label required>Price</Label>
@@ -147,54 +190,7 @@ export default function StepInfo({
         </div>
       </div>
 
-      {/* Customer dùng Controller để chắc giá trị sync đúng */}
-      <div>
-        <Label>Customer</Label>
-        <Controller
-          name="customerId"
-          control={control}
-          render={({ field }) => (
-            <select
-              {...field}
-              value={field.value ?? ""} // null -> ""
-              onChange={(e) =>
-                field.onChange(e.target.value === "" ? null : e.target.value)
-              }
-              className="w-full rounded-lg border px-3 py-2"
-              disabled={isCustomersLoading || isCustomersError}
-            >
-              <option value="">(optional) Select customer</option>
-              {customers.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                  {c.email ? ` (${c.email})` : ""}
-                </option>
-              ))}
-            </select>
-          )}
-        />
-
-        {isCustomersLoading && (
-          <p className="mt-1 text-xs text-gray-500">Loading customers...</p>
-        )}
-        {isCustomersError && (
-          <p className="mt-1 text-xs text-red-600">
-            Cannot load customers. Please try again.
-          </p>
-        )}
-      </div>
-
-      <div className="flex items-center gap-2">
-        <input
-          id="hasImages"
-          type="checkbox"
-          {...register("hasImages")}
-          className="h-4 w-4"
-        />
-        <label htmlFor="hasImages" className="text-sm">
-          Has images
-        </label>
-      </div>
+      {/* 🔹 Bỏ checkbox hasImages khỏi UI */}
 
       <p className="text-xs text-gray-500">
         Các trường có dấu <span className="text-red-600">*</span> là bắt buộc.

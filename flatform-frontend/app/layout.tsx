@@ -5,6 +5,7 @@ import { NextIntlClientProvider, useMessages } from "next-intl";
 import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 import "@/styles/globals.css";
+import "@/styles/nprogress.css";
 import "grapesjs/dist/css/grapes.min.css";
 import ReactQueryProvider from "./providers/ReactQueryProvider";
 import ToastProvider from "@/components/toast/ToastProvider";

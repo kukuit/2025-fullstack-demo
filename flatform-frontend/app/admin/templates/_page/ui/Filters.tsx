@@ -1,7 +1,10 @@
 "use client";
 import { useEffect, useMemo, useRef, useState, KeyboardEvent } from "react";
-import { STATUS_OPTIONS, CUSTOMER_OPTIONS } from "../constants";
+import { useQuery } from "@tanstack/react-query";
+import { STATUS_OPTIONS } from "../constants"; // ❗️ bỏ CUSTOMER_OPTIONS
 import type { QueryState } from "./types-internal";
+import { fetchCustomersForSelect } from "./../../new/service";
+import type { EmailCustomer } from "./../../new/types";
 
 export function Filters({
   q,
@@ -26,6 +29,17 @@ export function Filters({
   const [customerOpen, setCustomerOpen] = useState(false);
   const statusRef = useRef<HTMLDivElement | null>(null);
   const customerRef = useRef<HTMLDivElement | null>(null);
+
+  // 🔹 Load customers cho filter (simple list)
+  const {
+    data: customers = [],
+    isLoading: isCustomersLoading,
+    isError: isCustomersError,
+  } = useQuery<EmailCustomer[]>({
+    queryKey: ["email-customers", "filters"],
+    queryFn: () => fetchCustomersForSelect(),
+    staleTime: 5 * 60 * 1000,
+  });
 
   useEffect(() => {
     setName(q.name);
@@ -96,12 +110,13 @@ export function Filters({
       : `${names.slice(0, 2).join(", ")} +${names.length - 2}`;
   }, [selectedStatuses]);
 
-  const customerLabel = useMemo(
-    () =>
-      CUSTOMER_OPTIONS.find((c) => c.id === selectedCustomerId)?.label ??
-      "All customers",
-    [selectedCustomerId]
-  );
+  // 🔹 Label cho customer (All / 1 customer cụ thể)
+  const customerLabel = useMemo(() => {
+    if (!selectedCustomerId) return "All customers";
+    const found = customers.find((c) => c.id === selectedCustomerId);
+    if (!found) return "All customers";
+    return found.email ? `${found.name} (${found.email})` : found.name;
+  }, [selectedCustomerId, customers]);
 
   const toggleStatus = (id: number) =>
     setSelectedStatuses((prev) =>
@@ -256,7 +271,7 @@ export function Filters({
               )}
             </div>
 
-            {/* Customer single-select */}
+            {/* Customer single-select (All + customers từ API) */}
             <div className="relative flex flex-col gap-1" ref={customerRef}>
               <span className="text-xs font-medium text-gray-600">
                 Customer
@@ -268,7 +283,11 @@ export function Filters({
                 aria-expanded={customerOpen}
                 aria-haspopup="listbox"
               >
-                {customerLabel}
+                {isCustomersLoading
+                  ? "Loading customers..."
+                  : isCustomersError
+                  ? "Cannot load customers"
+                  : customerLabel}
               </button>
               {customerOpen && (
                 <div
@@ -277,9 +296,22 @@ export function Filters({
                   className="absolute z-20 mt-2 w-64 rounded-xl border bg-white shadow-lg p-2"
                 >
                   <div className="max-h-56 overflow-auto space-y-1 px-2 py-1">
-                    {CUSTOMER_OPTIONS.map((c) => (
+                    {/* Option All */}
+                    <label className="flex items-center gap-2 text-sm">
+                      <input
+                        type="radio"
+                        name="customer"
+                        checked={!selectedCustomerId}
+                        onChange={() => setSelectedCustomerId("")}
+                        className="h-4 w-4 border-gray-300"
+                      />
+                      <span>All customers</span>
+                    </label>
+
+                    {/* Các customer từ API */}
+                    {customers.map((c) => (
                       <label
-                        key={c.id || "all"}
+                        key={c.id}
                         className="flex items-center gap-2 text-sm"
                       >
                         <input
@@ -289,7 +321,10 @@ export function Filters({
                           onChange={() => setSelectedCustomerId(c.id)}
                           className="h-4 w-4 border-gray-300"
                         />
-                        <span>{c.label}</span>
+                        <span>
+                          {c.name}
+                          {c.email ? ` (${c.email})` : ""}
+                        </span>
                       </label>
                     ))}
                   </div>
