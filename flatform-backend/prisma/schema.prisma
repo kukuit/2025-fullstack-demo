@@ -379,6 +379,9 @@ model EmailCustomer {
   userId String?
   owner  Users?  @relation(fields: [userId], references: [id], onDelete: SetNull)
 
+  // NEW: public hay private
+  isPublic Boolean @default(false)
+
   // liên kết ngược: các template gắn với customer này
   templates EmailTemplate[]
 
@@ -388,6 +391,7 @@ model EmailCustomer {
 
   @@index([name])
   @@index([email])
+  @@index([isPublic])
   @@map("email_customer")
 }
 

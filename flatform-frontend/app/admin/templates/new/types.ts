@@ -4,13 +4,20 @@ import { CurrencyEnum } from "./constants";
 /** Schema form phía client (không cần images/draftId) */
 export const NewTemplateForm = z.object({
   name: z.string().min(3, "Tên tối thiểu 3 ký tự"),
-  slug: z.string().min(3).regex(/^[a-z0-9-]+$/, "Slug chỉ gồm a-z, 0-9, -"),
+  slug: z
+    .string()
+    .min(3)
+    .regex(/^[a-z0-9-]+$/, "Slug chỉ gồm a-z, 0-9, -"),
   description: z.string().optional(),
   price: z.number().min(0, "Giá >= 0"),
   currency: z.nativeEnum(CurrencyEnum),
   hasImages: z.boolean(),
   customerId: z.string().nullable().optional(),
-  thumbnailUrl: z.string().url("Thumbnail must be a valid URL").optional().nullable(),
+  thumbnailUrl: z
+    .string()
+    .url("Thumbnail must be a valid URL")
+    .optional()
+    .nullable(),
 });
 export type NewTemplateFormValues = z.infer<typeof NewTemplateForm>;
 
@@ -78,3 +85,11 @@ export type UpdateEmailTemplatePayload = Partial<{
   urlThumbnail: string | null;
   urlThumbnailX600: string | null;
 }>;
+
+export interface EmailCustomer {
+  id: string;
+  name: string;
+  email?: string | null;
+  phone?: string | null;
+  company?: string | null;
+}

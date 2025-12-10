@@ -1,9 +1,12 @@
 "use client";
 
 import { useEffect } from "react";
-import { useFormContext } from "react-hook-form";
+import { useFormContext, Controller } from "react-hook-form";
 import slugify from "slugify";
+import { useQuery } from "@tanstack/react-query";
 import { CurrencyEnum, CURRENCY_OPTIONS } from "../constants";
+import { fetchCustomersForSelect } from "../service";
+import type { EmailCustomer } from "../types";
 
 export default function StepInfo({
   setCurrency,
@@ -12,6 +15,7 @@ export default function StepInfo({
 }) {
   const {
     register,
+    control,
     formState: { errors },
     watch,
     setValue,
@@ -30,6 +34,11 @@ export default function StepInfo({
     setValue("slug", gen, { shouldValidate: true, shouldDirty: true });
   }, [nameValue, setValue]);
 
+  // 🔹 Luôn luôn set hasImages = true (ẩn khỏi UI)
+  useEffect(() => {
+    setValue("hasImages", true, { shouldValidate: false, shouldDirty: false });
+  }, [setValue]);
+
   const Label = ({
     children,
     required,
@@ -46,6 +55,17 @@ export default function StepInfo({
       )}
     </label>
   );
+
+  // Load customers
+  const {
+    data: customers = [],
+    isLoading: isCustomersLoading,
+    isError: isCustomersError,
+  } = useQuery<EmailCustomer[]>({
+    queryKey: ["email-customers", "select"],
+    queryFn: () => fetchCustomersForSelect(),
+    staleTime: 5 * 60 * 1000,
+  });
 
   return (
     <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm space-y-4">
@@ -89,6 +109,44 @@ export default function StepInfo({
         />
       </div>
 
+      {/* 🔹 Customer đưa lên trước Price */}
+      <div>
+        <Label>Customer</Label>
+        <Controller
+          name="customerId"
+          control={control}
+          render={({ field }) => (
+            <select
+              {...field}
+              value={field.value ?? ""} // null -> ""
+              onChange={(e) =>
+                field.onChange(e.target.value === "" ? null : e.target.value)
+              }
+              className="w-full rounded-lg border px-3 py-2"
+              disabled={isCustomersLoading || isCustomersError}
+            >
+              <option value="">Select customer</option>
+              {customers.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                  {c.email ? ` (${c.email})` : ""}
+                </option>
+              ))}
+            </select>
+          )}
+        />
+
+        {isCustomersLoading && (
+          <p className="mt-1 text-xs text-gray-500">Loading customers...</p>
+        )}
+        {isCustomersError && (
+          <p className="mt-1 text-xs text-red-600">
+            Cannot load customers. Please try again.
+          </p>
+        )}
+      </div>
+
+      {/* Price + Currency phía dưới Customer */}
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
         <div>
           <Label required>Price</Label>
@@ -132,28 +190,7 @@ export default function StepInfo({
         </div>
       </div>
 
-      <div>
-        <Label>Customer</Label>
-        <input
-          {...register("customerId", {
-            setValueAs: (v) => (v === "" ? null : v),
-          })}
-          className="w-full rounded-lg border px-3 py-2"
-          placeholder="(optional) customer id"
-        />
-      </div>
-
-      <div className="flex items-center gap-2">
-        <input
-          id="hasImages"
-          type="checkbox"
-          {...register("hasImages")}
-          className="h-4 w-4"
-        />
-        <label htmlFor="hasImages" className="text-sm">
-          Has images
-        </label>
-      </div>
+      {/* 🔹 Bỏ checkbox hasImages khỏi UI */}
 
       <p className="text-xs text-gray-500">
         Các trường có dấu <span className="text-red-600">*</span> là bắt buộc.

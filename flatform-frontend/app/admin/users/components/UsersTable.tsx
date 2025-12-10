@@ -24,8 +24,26 @@ export default function UsersTable({
   data,
   onToggleStatus,
   loadingIds = [],
+  disabled,
   onEdit,
 }: Props) {
+  const [menuOpenId, setMenuOpenId] = React.useState<string | null>(null);
+
+  // Đóng menu khi click outside
+  React.useEffect(() => {
+    if (!menuOpenId) return;
+
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest("[data-dropdown-menu]")) {
+        setMenuOpenId(null);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [menuOpenId]);
+
   // ===== Desktop/Table columns =====
   const columns: ColumnDef<User>[] = [
     {
@@ -86,69 +104,117 @@ export default function UsersTable({
       cell: ({ row }) => {
         const user = row.original;
         const isLoading = loadingIds.includes(user.id);
+        const isActive = user.status === "active";
+        const isOpen = menuOpenId === user.id;
 
-        const confirmTitle =
-          user.status === "active"
-            ? "Vô hiệu hóa người dùng"
-            : "Kích hoạt người dùng";
+        const confirmTitle = isActive
+          ? "Vô hiệu hóa người dùng"
+          : "Kích hoạt người dùng";
         const confirmMessage = `Bạn có chắc chắn muốn ${
-          user.status === "active" ? "vô hiệu hóa" : "kích hoạt"
+          isActive ? "vô hiệu hóa" : "kích hoạt"
         } user ${user.email}?`;
 
         return (
-          <div className="flex items-center justify-center gap-2">
-            {onEdit ? (
-              <button
-                onClick={() => onEdit(user)}
-                className="flex items-center gap-1 rounded bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 transition hover:bg-blue-100"
+          <div
+            className="relative flex items-center justify-center"
+            data-dropdown-menu
+          >
+            {/* Nút ... */}
+            <button
+              type="button"
+              disabled={disabled || isLoading}
+              onClick={() =>
+                setMenuOpenId((prev) => (prev === user.id ? null : user.id))
+              }
+              className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-gray-200 text-gray-500 transition hover:bg-gray-100 hover:text-gray-700 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <span className="sr-only">Actions</span>
+              <svg
+                className="h-4 w-4"
+                viewBox="0 0 24 24"
+                fill="currentColor"
+                aria-hidden="true"
               >
-                <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none">
-                  <path
-                    d="M4 20h4l10-10-4-4L4 16v4z"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                  />
-                </svg>
-                Edit
-              </button>
-            ) : (
-              <Link
-                href={`/admin/users/${user.id}`}
-                className="flex items-center gap-1 rounded bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 transition hover:bg-blue-100"
-              >
-                <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none">
-                  <path
-                    d="M4 20h4l10-10-4-4L4 16v4z"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                  />
-                </svg>
-                Edit
-              </Link>
-            )}
+                <circle cx="5" cy="12" r="1.5" />
+                <circle cx="12" cy="12" r="1.5" />
+                <circle cx="19" cy="12" r="1.5" />
+              </svg>
+            </button>
 
-            {isLoading ? (
-              <span className="rounded bg-gray-100 px-2 py-1 text-xs font-medium text-gray-500">
-                Đang xử lý...
-              </span>
-            ) : (
-              <ConfirmModal
-                title={confirmTitle}
-                message={confirmMessage}
-                onConfirm={() => onToggleStatus(user)}
-                trigger={
+            {/* Menu xổ ra với z-index cao hơn – mở LÊN TRÊN */}
+            {isOpen && (
+              <div className="absolute right-0 bottom-full mb-2 z-[100] flex flex-col gap-2 rounded border border-gray-200 bg-white p-2 shadow-xl">
+                {/* Edit giữ nguyên style cũ */}
+                {onEdit ? (
                   <button
-                    className={`w-[92px] rounded px-2 py-1 text-center text-xs font-medium transition
-                      ${
-                        user.status === "active"
-                          ? "bg-red-50 text-red-700 hover:bg-red-100"
-                          : "bg-green-50 text-green-700 hover:bg-green-100"
-                      }`}
+                    onClick={() => {
+                      onEdit(user);
+                      setMenuOpenId(null);
+                    }}
+                    className="flex items-center gap-1 rounded bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 transition hover:bg-blue-100 whitespace-nowrap"
                   >
-                    {user.status === "active" ? "Disable" : "Kích hoạt"}
+                    <svg
+                      className="h-3.5 w-3.5"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                    >
+                      <path
+                        d="M4 20h4l10-10-4-4L4 16v4z"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                      />
+                    </svg>
+                    Edit
                   </button>
-                }
-              />
+                ) : (
+                  <Link
+                    href={`/admin/users/${user.id}`}
+                    onClick={() => setMenuOpenId(null)}
+                    className="flex items-center gap-1 rounded bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 transition hover:bg-blue-100 whitespace-nowrap"
+                  >
+                    <svg
+                      className="h-3.5 w-3.5"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                    >
+                      <path
+                        d="M4 20h4l10-10-4-4L4 16v4z"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                      />
+                    </svg>
+                    Edit
+                  </Link>
+                )}
+
+                {/* Disable / Kích hoạt giữ style cũ */}
+                {isLoading ? (
+                  <span className="w-[92px] rounded bg-gray-100 px-2 py-1 text-center text-xs font-medium text-gray-500">
+                    Đang xử lý...
+                  </span>
+                ) : (
+                  <ConfirmModal
+                    title={confirmTitle}
+                    message={confirmMessage}
+                    onConfirm={() => {
+                      onToggleStatus(user);
+                      setMenuOpenId(null);
+                    }}
+                    trigger={
+                      <button
+                        className={`w-[92px] rounded px-2 py-1 text-center text-xs font-medium transition whitespace-nowrap
+                          ${
+                            user.status === "active"
+                              ? "bg-red-50 text-red-700 hover:bg-red-100"
+                              : "bg-green-50 text-green-700 hover:bg-green-100"
+                          }`}
+                      >
+                        {user.status === "active" ? "Disable" : "Kích hoạt"}
+                      </button>
+                    }
+                  />
+                )}
+              </div>
             )}
           </div>
         );
@@ -174,13 +240,13 @@ export default function UsersTable({
             roleName.toLowerCase() === "admin"
               ? "bg-indigo-50 text-indigo-700"
               : "bg-sky-50 text-sky-700";
+          const isOpen = menuOpenId === user.id;
 
-          const confirmTitle =
-            user.status === "active"
-              ? "Vô hiệu hóa người dùng"
-              : "Kích hoạt người dùng";
+          const confirmTitle = isActive
+            ? "Vô hiệu hóa người dùng"
+            : "Kích hoạt người dùng";
           const confirmMessage = `Bạn có chắc chắn muốn ${
-            user.status === "active" ? "vô hiệu hóa" : "kích hoạt"
+            isActive ? "vô hiệu hóa" : "kích hoạt"
           } user ${user.email}?`;
 
           return (
@@ -212,45 +278,83 @@ export default function UsersTable({
                   </div>
                 </div>
 
-                <div className="flex flex-col items-end gap-2">
-                  {onEdit ? (
-                    <button
-                      onClick={() => onEdit(user)}
-                      className="rounded bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 transition hover:bg-blue-100"
+                <div className="relative flex items-start" data-dropdown-menu>
+                  {/* Nút ... */}
+                  <button
+                    type="button"
+                    disabled={disabled || isLoading}
+                    onClick={() =>
+                      setMenuOpenId((prev) =>
+                        prev === user.id ? null : user.id
+                      )
+                    }
+                    className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-gray-200 text-gray-500 transition hover:bg-gray-100 hover:text-gray-700 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <span className="sr-only">Actions</span>
+                    <svg
+                      className="h-4 w-4"
+                      viewBox="0 0 24 24"
+                      fill="currentColor"
+                      aria-hidden="true"
                     >
-                      Edit
-                    </button>
-                  ) : (
-                    <Link
-                      href={`/admin/users/${user.id}`}
-                      className="rounded bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 transition hover:bg-blue-100"
-                    >
-                      Edit
-                    </Link>
-                  )}
+                      <circle cx="5" cy="12" r="1.5" />
+                      <circle cx="12" cy="12" r="1.5" />
+                      <circle cx="19" cy="12" r="1.5" />
+                    </svg>
+                  </button>
 
-                  {isLoading ? (
-                    <span className="rounded bg-gray-100 px-2 py-1 text-xs font-medium text-gray-500">
-                      Đang xử lý...
-                    </span>
-                  ) : (
-                    <ConfirmModal
-                      title={confirmTitle}
-                      message={confirmMessage}
-                      onConfirm={() => onToggleStatus(user)}
-                      trigger={
+                  {/* Menu xổ ra với z-index cao – mở LÊN TRÊN */}
+                  {isOpen && (
+                    <div className="absolute right-0 bottom-full mb-2 z-[100] flex flex-col gap-2 rounded border border-gray-200 bg-white p-2 shadow-xl">
+                      {onEdit ? (
                         <button
-                          className={`rounded px-2 py-1 text-xs font-medium transition
-                            ${
-                              user.status === "active"
-                                ? "bg-red-50 text-red-700 hover:bg-red-100"
-                                : "bg-green-50 text-green-700 hover:bg-green-100"
-                            }`}
+                          onClick={() => {
+                            onEdit(user);
+                            setMenuOpenId(null);
+                          }}
+                          className="rounded bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 transition hover:bg-blue-100 whitespace-nowrap"
                         >
-                          {user.status === "active" ? "Disable" : "Kích hoạt"}
+                          Edit
                         </button>
-                      }
-                    />
+                      ) : (
+                        <Link
+                          href={`/admin/users/${user.id}`}
+                          onClick={() => setMenuOpenId(null)}
+                          className="rounded bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 transition hover:bg-blue-100 whitespace-nowrap"
+                        >
+                          Edit
+                        </Link>
+                      )}
+
+                      {isLoading ? (
+                        <span className="rounded bg-gray-100 px-2 py-1 text-xs font-medium text-gray-500 whitespace-nowrap">
+                          Đang xử lý...
+                        </span>
+                      ) : (
+                        <ConfirmModal
+                          title={confirmTitle}
+                          message={confirmMessage}
+                          onConfirm={() => {
+                            onToggleStatus(user);
+                            setMenuOpenId(null);
+                          }}
+                          trigger={
+                            <button
+                              className={`rounded px-2 py-1 text-xs font-medium transition whitespace-nowrap
+                                ${
+                                  user.status === "active"
+                                    ? "bg-red-50 text-red-700 hover:bg-red-100"
+                                    : "bg-green-50 text-green-700 hover:bg-green-100"
+                                }`}
+                            >
+                              {user.status === "active"
+                                ? "Disable"
+                                : "Kích hoạt"}
+                            </button>
+                          }
+                        />
+                      )}
+                    </div>
                   )}
                 </div>
               </div>
