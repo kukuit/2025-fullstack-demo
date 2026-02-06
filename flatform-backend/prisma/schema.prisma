@@ -81,7 +81,11 @@ model Users {
   emailTemplates EmailTemplate[]
   emailTpTags    EmailTpTag[]
   emailTpShared  EmailTpShare[]  @relation("EmailTpSharedWith")
-  emailCustomers EmailCustomer[] @relation(fields: [], references: [])
+  customers      Customer[]
+  EmailGroup     EmailGroup[]
+  EmailCustomer  EmailCustomer[]
+  EmailCampaign  EmailCampaign[]
+  EmailSend      EmailSend[]
 
   @@fulltext([email])
   @@map("users")
@@ -252,7 +256,19 @@ model Status {
   id     Int    @id
   status String
 
-  NotedNote NotedNote[]
+  // Noted
+  notedNotes NotedNote[]
+
+  // Email module (group/campaign/send/events)
+  emailGroups         EmailGroup[]
+  emailCustomers      EmailCustomer[]
+  emailCustomerGroups EmailCustomerGroup[]
+  emailCampaigns      EmailCampaign[]
+  emailCampaignEmails EmailCampaignEmail[]
+  emailCampaignGroups EmailCampaignGroup[]
+  emailSends          EmailSend[]
+  emailSendRecipients EmailSendRecipient[]
+  emailEvents         EmailEvent[]
 
   @@map("status")
 }
@@ -367,7 +383,7 @@ model EmailTpStatus {
 }
 
 // ---------- KHÁCH HÀNG ----------
-model EmailCustomer {
+model Customer {
   id      String  @id @default(cuid())
   name    String
   email   String? @db.VarChar(191)
@@ -392,7 +408,7 @@ model EmailCustomer {
   @@index([name])
   @@index([email])
   @@index([isPublic])
-  @@map("email_customer")
+  @@map("customers")
 }
 
 // ---------- TEMPLATE chính ----------
@@ -416,7 +432,7 @@ model EmailTemplate {
 
   // Customer (optional)
   customerId String?
-  customer   EmailCustomer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  customer   Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
 
   // Status
   statusId Int           @default(1)
@@ -427,8 +443,9 @@ model EmailTemplate {
   tags   EmailTpTemplateTag[] // <— bảng nối (relation name: tags)
   shares EmailTpShare[]
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+  EmailSend EmailSend[]
 
   // Indexes (đã thêm updatedAt + userId)
   @@index([name])
@@ -505,4 +522,302 @@ model EmailTpShare {
 
   @@unique([templateId, sharedWith])
   @@map("email_tp_share")
+}
+
+// ---------- EMAIL GROUP ----------
+model EmailGroup {
+  id   String @id @default(cuid())
+  name String
+
+  // owner bắt buộc
+  ownerId String
+  owner   Users  @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  // thường không share
+  isPublic Boolean @default(false)
+
+  // Status
+  statusId Int    @default(1)
+  status   Status @relation(fields: [statusId], references: [id])
+
+  // Relations
+  customers EmailCustomerGroup[] // multi per customer
+  campaigns EmailCampaignGroup[] // campaign có thể chọn group
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([name, ownerId])
+  @@index([ownerId])
+  @@index([statusId])
+  @@map("email_group")
+}
+
+// ---------- EMAIL CUSTOMER (1 record = 1 email) ----------
+model EmailCustomer {
+  id    String @id @default(cuid())
+  email String @db.VarChar(191) // bắt buộc
+
+  // các field khác nullable
+  name    String?
+  phone   String? @db.VarChar(64)
+  company String?
+  notes   String? @db.Text
+
+  // owner bắt buộc
+  userId String
+  owner  Users  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // thường không share
+  isPublic Boolean @default(false)
+
+  // Status
+  statusId Int    @default(1)
+  status   Status @relation(fields: [statusId], references: [id])
+
+  // Relations
+  groups    EmailCustomerGroup[]
+  campaigns EmailCampaignEmail[]
+
+  // send & events
+  sendRecipients EmailSendRecipient[]
+  events         EmailEvent[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Nếu muốn tránh trùng email trong cùng owner, bật unique này:
+  // @@unique([userId, email])
+
+  @@index([email])
+  @@index([userId])
+  @@index([isPublic])
+  @@index([statusId])
+  @@map("email_customer")
+}
+
+// ---------- JOIN: CUSTOMER <-> GROUP (multi-group) ----------
+model EmailCustomerGroup {
+  id         String @id @default(cuid())
+  customerId String
+  groupId    String
+
+  customer EmailCustomer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  group    EmailGroup    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  // Status
+  statusId Int    @default(1)
+  status   Status @relation(fields: [statusId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@unique([customerId, groupId])
+  @@index([customerId])
+  @@index([groupId])
+  @@index([statusId])
+  @@map("email_customer_group")
+}
+
+// ---------- EMAIL CAMPAIGN ----------
+model EmailCampaign {
+  id          String  @id @default(cuid())
+  name        String
+  description String? @db.Text
+
+  // owner bắt buộc
+  ownerId String
+  owner   Users  @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  // thường không share
+  isPublic Boolean @default(false)
+
+  // Status
+  statusId Int    @default(1)
+  status   Status @relation(fields: [statusId], references: [id])
+
+  // Relations
+  // 1 campaign nhiều email; 1 email thuộc nhiều campaign hoặc không
+  emails EmailCampaignEmail[]
+
+  // campaign có thể chọn group email
+  groups EmailCampaignGroup[]
+
+  // khi bấm gửi
+  sends EmailSend[]
+
+  // webhook events
+  events EmailEvent[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([ownerId])
+  @@index([statusId])
+  @@index([createdAt])
+  @@index([updatedAt])
+  @@map("email_campaign")
+}
+
+// ---------- JOIN: CAMPAIGN <-> EMAIL CUSTOMER ----------
+model EmailCampaignEmail {
+  id         String @id @default(cuid())
+  campaignId String
+  customerId String
+
+  campaign EmailCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  customer EmailCustomer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  // Status
+  statusId Int    @default(1)
+  status   Status @relation(fields: [statusId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@unique([campaignId, customerId])
+  @@index([campaignId])
+  @@index([customerId])
+  @@index([statusId])
+  @@map("email_campaign_email")
+}
+
+// ---------- JOIN: CAMPAIGN <-> GROUP ----------
+model EmailCampaignGroup {
+  id         String @id @default(cuid())
+  campaignId String
+  groupId    String
+
+  campaign EmailCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  group    EmailGroup    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  // Status
+  statusId Int    @default(1)
+  status   Status @relation(fields: [statusId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@unique([campaignId, groupId])
+  @@index([campaignId])
+  @@index([groupId])
+  @@index([statusId])
+  @@map("email_campaign_group")
+}
+
+// ---------- EMAIL SEND (1 lần bấm gửi) ----------
+model EmailSend {
+  id String @id @default(cuid())
+
+  // bắt buộc gắn campaign_id
+  campaignId String
+  campaign   EmailCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  // owner bắt buộc
+  ownerId String
+  owner   Users  @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  // (optional) gắn template gửi
+  templateId String?
+  template   EmailTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
+
+  // meta gửi
+  subject   String? @db.VarChar(255)
+  fromEmail String? @db.VarChar(191)
+  fromName  String? @db.VarChar(191)
+
+  // snapshot html (optional)
+  html String? @db.LongText
+
+  // Status
+  statusId Int    @default(1)
+  status   Status @relation(fields: [statusId], references: [id])
+
+  // Relations
+  recipients EmailSendRecipient[]
+  events     EmailEvent[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([campaignId])
+  @@index([ownerId])
+  @@index([templateId])
+  @@index([statusId])
+  @@map("email_send")
+}
+
+// ---------- EMAIL SEND RECIPIENT (snapshot người nhận tại thời điểm gửi) ----------
+model EmailSendRecipient {
+  id String @id @default(cuid())
+
+  sendId String
+  send   EmailSend @relation(fields: [sendId], references: [id], onDelete: Cascade)
+
+  // nếu chọn từ email_customer
+  customerId String?
+  customer   EmailCustomer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+
+  // snapshot để không phụ thuộc customer.email đổi sau này
+  toEmail String @db.VarChar(191)
+
+  // mapping message-id provider (để map webhook)
+  providerMessageId String? @db.VarChar(191)
+
+  // Status
+  statusId Int    @default(1)
+  status   Status @relation(fields: [statusId], references: [id])
+
+  // Relations
+  events EmailEvent[]
+
+  createdAt DateTime @default(now())
+
+  @@index([sendId])
+  @@index([customerId])
+  @@index([providerMessageId])
+  @@index([statusId])
+  @@map("email_send_recipient")
+}
+
+// ---------- EMAIL EVENT (webhook mailgun) ----------
+model EmailEvent {
+  id String @id @default(cuid())
+
+  // bắt buộc có campaign_id
+  campaignId String
+  campaign   EmailCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  // optional trace theo send / recipient / customer
+  sendId String?
+  send   EmailSend? @relation(fields: [sendId], references: [id], onDelete: SetNull)
+
+  sendRecipientId String?
+  sendRecipient   EmailSendRecipient? @relation(fields: [sendRecipientId], references: [id], onDelete: SetNull)
+
+  customerId String?
+  customer   EmailCustomer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+
+  provider  String  @default("mailgun")
+  messageId String? @db.VarChar(191)
+
+  eventType String  @db.VarChar(64) // delivered/opened/clicked/failed/complained...
+  severity  String? @db.VarChar(32)
+
+  // yêu cầu: thêm timestamp (lấy từ webhook provider)
+  timestamp DateTime
+
+  payloadJson Json?
+
+  // Status
+  statusId Int    @default(1)
+  status   Status @relation(fields: [statusId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@index([campaignId, timestamp])
+  @@index([messageId])
+  @@index([eventType])
+  @@index([sendId])
+  @@index([sendRecipientId])
+  @@index([customerId])
+  @@index([statusId])
+  @@map("email_event")
 }
