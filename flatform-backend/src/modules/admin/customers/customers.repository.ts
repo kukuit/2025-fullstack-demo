@@ -7,7 +7,7 @@ import { CustomerStatus } from './customers.dto';
 export class CustomersRepository {
   constructor(private readonly prisma: PrismaService) {}
 
-  // -------- EmailCustomer --------
+  // -------- Customer --------
   async findMany(params: {
     where?: any;
     orderBy?: any;
@@ -16,7 +16,7 @@ export class CustomersRepository {
     include?: any;
   }) {
     const { where, orderBy, skip, take, include } = params;
-    return this.prisma.emailCustomer.findMany({
+    return this.prisma.customer.findMany({
       where,
       orderBy,
       skip,
@@ -26,28 +26,28 @@ export class CustomersRepository {
   }
 
   async count(where?: any) {
-    return this.prisma.emailCustomer.count({ where });
+    return this.prisma.customer.count({ where });
   }
 
   async findById(id: string) {
-    return this.prisma.emailCustomer.findUnique({
+    return this.prisma.customer.findUnique({
       where: { id },
     });
   }
 
   async create(data: any) {
-    return this.prisma.emailCustomer.create({ data });
+    return this.prisma.customer.create({ data });
   }
 
   async update(id: string, data: any) {
-    return this.prisma.emailCustomer.update({
+    return this.prisma.customer.update({
       where: { id },
       data,
     });
   }
 
   async setStatusById(id: string, status: CustomerStatus) {
-    return this.prisma.emailCustomer.update({
+    return this.prisma.customer.update({
       where: { id },
       data: { status },
     });

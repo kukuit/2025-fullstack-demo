@@ -3,7 +3,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import {
   CreateCustomerDto,
   CustomerStatus,
-  EmailCustomerEntity,
+  CustomerEntity,
   PaginatedResponse,
   SearchCustomersDto,
   UpdateCustomerDto,
@@ -14,13 +14,13 @@ import { CustomersRepository } from './customers.repository';
 export class CustomersService {
   constructor(private readonly repo: CustomersRepository) {}
 
-  private toEntity(record: any): EmailCustomerEntity {
+  private toEntity(record: any): CustomerEntity {
     if (!record) return null as any;
     // Ở đây shape Prisma ~ giống Entity nên cast là được
-    return record as EmailCustomerEntity;
+    return record as CustomerEntity;
   }
 
-  async getByIdSafe(id: string): Promise<EmailCustomerEntity | null> {
+  async getByIdSafe(id: string): Promise<CustomerEntity | null> {
     const customer = await this.repo.findById(id);
     if (!customer) return null;
     return this.toEntity(customer);
@@ -32,7 +32,7 @@ export class CustomersService {
   async create(
     dto: CreateCustomerDto,
     currentUserId: string,
-  ): Promise<EmailCustomerEntity> {
+  ): Promise<CustomerEntity> {
     const isPublic = dto.isPublic ?? false;
 
     const created = await this.repo.create({
@@ -92,7 +92,7 @@ export class CustomersService {
     id: string,
     status: CustomerStatus,
     _currentUserId: string,
-  ): Promise<EmailCustomerEntity> {
+  ): Promise<CustomerEntity> {
     const existing = await this.repo.findById(id);
     if (!existing) throw new NotFoundException('Customer not found');
 
@@ -108,7 +108,7 @@ export class CustomersService {
   async searchAll(
     q: SearchCustomersDto,
     _currentUserId?: string,
-  ): Promise<PaginatedResponse<EmailCustomerEntity>> {
+  ): Promise<PaginatedResponse<CustomerEntity>> {
     const { page, limit, status, visibility, q: text, sortBy, sortOrder } = q;
 
     const where: any = {};

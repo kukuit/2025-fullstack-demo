@@ -19,7 +19,7 @@ export enum CustomerStatus {
 }
 
 /** Entity cho Swagger (response) */
-export class EmailCustomerEntity {
+export class CustomerEntity {
   @ApiProperty({ example: 'ckv9y3q0c0001s1x8d9z0k3n1' })
   id: string;
 

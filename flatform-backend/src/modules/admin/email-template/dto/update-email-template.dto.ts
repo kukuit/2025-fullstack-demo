@@ -46,7 +46,7 @@ export class UpdateEmailTemplateDto {
   @IsString()
   currency?: string;
 
-  @ApiPropertyOptional({ description: 'Liên kết tới EmailCustomer' })
+  @ApiPropertyOptional({ description: 'Liên kết tới Customer' })
   @IsOptional()
   @IsString()
   customerId?: string;
