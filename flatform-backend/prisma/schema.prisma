@@ -82,10 +82,10 @@ model Users {
   emailTpTags    EmailTpTag[]
   emailTpShared  EmailTpShare[]  @relation("EmailTpSharedWith")
   customers      Customer[]
-  EmailGroup     EmailGroup[]
-  EmailCustomer  EmailCustomer[]
-  EmailCampaign  EmailCampaign[]
-  EmailSend      EmailSend[]
+  emailGroup     EmailGroup[]
+  emailCustomer  EmailCustomer[]
+  emailCampaign  EmailCampaign[]
+  emailSend      EmailSend[]
 
   @@fulltext([email])
   @@map("users")
@@ -443,9 +443,10 @@ model EmailTemplate {
   tags   EmailTpTemplateTag[] // <— bảng nối (relation name: tags)
   shares EmailTpShare[]
 
-  createdAt DateTime    @default(now())
-  updatedAt DateTime    @updatedAt
-  EmailSend EmailSend[]
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+  sends         EmailSend[]
+  EmailCampaign EmailCampaign[]
 
   // Indexes (đã thêm updatedAt + userId)
   @@index([name])
@@ -628,6 +629,10 @@ model EmailCampaign {
   ownerId String
   owner   Users  @relation(fields: [ownerId], references: [id], onDelete: Cascade)
 
+  // ✅ NEW: campaign bắt buộc chọn 1 template mặc định
+  templateId String
+  template   EmailTemplate @relation(fields: [templateId], references: [id], onDelete: Restrict)
+
   // thường không share
   isPublic Boolean @default(false)
 
@@ -636,22 +641,16 @@ model EmailCampaign {
   status   Status @relation(fields: [statusId], references: [id])
 
   // Relations
-  // 1 campaign nhiều email; 1 email thuộc nhiều campaign hoặc không
   emails EmailCampaignEmail[]
-
-  // campaign có thể chọn group email
   groups EmailCampaignGroup[]
-
-  // khi bấm gửi
-  sends EmailSend[]
-
-  // webhook events
+  sends  EmailSend[]
   events EmailEvent[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([ownerId])
+  @@index([templateId]) // ✅ NEW index
   @@index([statusId])
   @@index([createdAt])
   @@index([updatedAt])
@@ -714,17 +713,17 @@ model EmailSend {
   ownerId String
   owner   Users  @relation(fields: [ownerId], references: [id], onDelete: Cascade)
 
-  // (optional) gắn template gửi
-  templateId String?
-  template   EmailTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  // ✅ CHANGED: templateId bắt buộc + restrict (không cho xóa template đang dùng)
+  templateId String
+  template   EmailTemplate @relation(fields: [templateId], references: [id], onDelete: Restrict)
 
   // meta gửi
   subject   String? @db.VarChar(255)
   fromEmail String? @db.VarChar(191)
   fromName  String? @db.VarChar(191)
 
-  // snapshot html (optional)
-  html String? @db.LongText
+  // ✅ CHANGED: htmlSnapshot bắt buộc (không phụ thuộc template html thay đổi)
+  htmlSnapshot String @db.LongText
 
   // Status
   statusId Int    @default(1)

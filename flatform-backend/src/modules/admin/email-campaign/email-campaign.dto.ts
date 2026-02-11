@@ -4,7 +4,6 @@ import {
   ArrayMaxSize,
   IsArray,
   IsBoolean,
-  IsEmail,
   IsIn,
   IsInt,
   IsOptional,
@@ -18,24 +17,25 @@ export const STATUS_DISABLED = 0;
 
 export type VisibilityFilter = 'all' | 'public' | 'private';
 export type StatusFilter = 'all' | 'active' | 'disabled';
-export type SortBy = 'createdAt' | 'email' | 'name' | 'company';
+export type SortBy = 'createdAt' | 'updatedAt' | 'name';
 export type SortOrder = 'asc' | 'desc';
 
-export class EmailCustomerEntity {
+export class EmailCampaignEntity {
   @ApiProperty() id: string;
-  @ApiProperty() email: string;
+  @ApiProperty() name: string;
+  @ApiPropertyOptional() description?: string | null;
 
-  @ApiPropertyOptional() name?: string | null;
-  @ApiPropertyOptional() phone?: string | null;
-  @ApiPropertyOptional() company?: string | null;
-  @ApiPropertyOptional() notes?: string | null;
+  @ApiProperty() ownerId: string;
+  @ApiProperty() templateId: string;
+
+  @ApiProperty() isPublic: boolean;
+  @ApiProperty() statusId: number;
 
   @ApiProperty({ type: [String] })
   groupIds: string[];
 
-  @ApiProperty() userId: string;
-  @ApiProperty() isPublic: boolean;
-  @ApiProperty() statusId: number;
+  @ApiProperty({ type: [String] })
+  customerIds: string[];
 
   @ApiProperty() createdAt: string;
   @ApiProperty() updatedAt: string;
@@ -49,7 +49,7 @@ export class PaginatedResponse<T> {
   @ApiProperty() totalPages: number;
 }
 
-export class SearchEmailCustomersDto {
+export class SearchEmailCampaignsDto {
   @ApiPropertyOptional({ default: 'all', enum: ['all', 'active', 'disabled'] })
   @IsOptional()
   @IsIn(['all', 'active', 'disabled'])
@@ -60,7 +60,7 @@ export class SearchEmailCustomersDto {
   @IsIn(['all', 'public', 'private'])
   visibility?: VisibilityFilter = 'all';
 
-  @ApiPropertyOptional({ description: 'Search email/name/phone/company' })
+  @ApiPropertyOptional({ description: 'Search name/description' })
   @IsOptional()
   @IsString()
   q?: string;
@@ -80,10 +80,10 @@ export class SearchEmailCustomersDto {
 
   @ApiPropertyOptional({
     default: 'createdAt',
-    enum: ['createdAt', 'email', 'name', 'company'],
+    enum: ['createdAt', 'updatedAt', 'name'],
   })
   @IsOptional()
-  @IsIn(['createdAt', 'email', 'name', 'company'])
+  @IsIn(['createdAt', 'updatedAt', 'name'])
   sortBy?: SortBy = 'createdAt';
 
   @ApiPropertyOptional({ default: 'desc', enum: ['asc', 'desc'] })
@@ -92,41 +92,66 @@ export class SearchEmailCustomersDto {
   sortOrder?: SortOrder = 'desc';
 }
 
-export class CreateEmailCustomerDto {
-  @ApiProperty() @IsEmail() email: string;
+export class CreateEmailCampaignDto {
+  @ApiProperty()
+  @IsString()
+  name: string;
 
-  @ApiPropertyOptional() @IsOptional() @IsString() name?: string;
-  @ApiPropertyOptional() @IsOptional() @IsString() phone?: string;
-  @ApiPropertyOptional() @IsOptional() @IsString() company?: string;
-  @ApiPropertyOptional() @IsOptional() @IsString() notes?: string;
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  description?: string;
+
+  // ✅ required
+  @ApiProperty()
+  @IsString()
+  templateId: string;
 
   @ApiPropertyOptional({ default: false })
   @IsOptional()
   @IsBoolean()
   isPublic?: boolean = false;
 
-  @ApiPropertyOptional({
-    description: 'Optional: add this customer into groups on create',
-  })
+  // ✅ optional: 0..n
+  @ApiPropertyOptional({ type: [String] })
   @IsOptional()
   @IsArray()
   @ArrayMaxSize(50)
   @IsString({ each: true })
   groupIds?: string[];
+
+  // ✅ optional: 0..n
+  @ApiPropertyOptional({ type: [String] })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(500)
+  @IsString({ each: true })
+  customerIds?: string[];
 }
 
-export class UpdateEmailCustomerDto {
-  @ApiPropertyOptional() @IsOptional() @IsEmail() email?: string;
+export class UpdateEmailCampaignDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  name?: string;
 
-  @ApiPropertyOptional() @IsOptional() @IsString() name?: string;
-  @ApiPropertyOptional() @IsOptional() @IsString() phone?: string;
-  @ApiPropertyOptional() @IsOptional() @IsString() company?: string;
-  @ApiPropertyOptional() @IsOptional() @IsString() notes?: string;
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  description?: string;
 
-  @ApiPropertyOptional() @IsOptional() @IsBoolean() isPublic?: boolean;
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  templateId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  isPublic?: boolean;
 }
 
-export class ReplaceEmailCustomerGroupsDto {
+export class ReplaceEmailCampaignGroupsDto {
   @ApiProperty({ type: [String] })
   @IsArray()
   @ArrayMaxSize(50)
@@ -134,7 +159,15 @@ export class ReplaceEmailCustomerGroupsDto {
   groupIds: string[];
 }
 
-export class SetEmailCustomerStatusDto {
+export class ReplaceEmailCampaignEmailsDto {
+  @ApiProperty({ type: [String] })
+  @IsArray()
+  @ArrayMaxSize(500)
+  @IsString({ each: true })
+  customerIds: string[];
+}
+
+export class SetEmailCampaignStatusDto {
   @ApiProperty({ enum: [0, 1] })
   @Type(() => Number)
   @IsInt()

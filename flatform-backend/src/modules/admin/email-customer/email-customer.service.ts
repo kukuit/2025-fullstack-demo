@@ -1,4 +1,8 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import {
   CreateEmailCustomerDto,
@@ -10,13 +14,26 @@ import {
   STATUS_DISABLED,
   UpdateEmailCustomerDto,
 } from './email-customer.dto';
-import { EmailCustomerRepository } from './email-customer.repository';
+import {
+  EmailCustomerRepository,
+  GROUPS_SELECT,
+} from './email-customer.repository';
 
 @Injectable()
 export class EmailCustomerService {
   constructor(private readonly repo: EmailCustomerRepository) {}
 
+  private normalizeEmail(email: string) {
+    return String(email ?? '')
+      .trim()
+      .toLowerCase();
+  }
+
   private toEntity(x: any): EmailCustomerEntity {
+    const groupIds = Array.isArray(x?.groups)
+      ? x.groups.map((g: any) => g.groupId).filter(Boolean)
+      : [];
+
     return {
       id: x.id,
       email: x.email,
@@ -24,6 +41,9 @@ export class EmailCustomerService {
       phone: x.phone ?? null,
       company: x.company ?? null,
       notes: x.notes ?? null,
+
+      groupIds,
+
       userId: x.userId,
       isPublic: x.isPublic,
       statusId: x.statusId,
@@ -32,10 +52,15 @@ export class EmailCustomerService {
     };
   }
 
-  async list(userId: string, q: SearchEmailCustomersDto): Promise<PaginatedResponse<EmailCustomerEntity>> {
+  async list(
+    userId: string,
+    q: SearchEmailCustomersDto,
+  ): Promise<PaginatedResponse<EmailCustomerEntity>> {
     const safePage = Math.max(1, q.page ?? 1);
     const safeLimit = Math.min(100, Math.max(1, q.limit ?? 10));
     const skip = (safePage - 1) * safeLimit;
+
+    const keyword = q.q?.trim();
 
     const where: Prisma.EmailCustomerWhereInput = {
       userId,
@@ -43,13 +68,13 @@ export class EmailCustomerService {
       ...(q.status === 'disabled' ? { statusId: STATUS_DISABLED } : {}),
       ...(q.visibility === 'public' ? { isPublic: true } : {}),
       ...(q.visibility === 'private' ? { isPublic: false } : {}),
-      ...(q.q
+      ...(keyword
         ? {
             OR: [
-              { email: { contains: q.q } },
-              { name: { contains: q.q } },
-              { phone: { contains: q.q } },
-              { company: { contains: q.q } },
+              { email: { contains: keyword } },
+              { name: { contains: keyword } },
+              { phone: { contains: keyword } },
+              { company: { contains: keyword } },
             ],
           }
         : {}),
@@ -60,7 +85,13 @@ export class EmailCustomerService {
     };
 
     const [items, total] = await Promise.all([
-      this.repo.findMany({ where, orderBy, skip, take: safeLimit }),
+      this.repo.findMany({
+        where,
+        orderBy,
+        skip,
+        take: safeLimit,
+        include: GROUPS_SELECT, // ✅
+      }),
       this.repo.count({ where }),
     ]);
 
@@ -74,67 +105,128 @@ export class EmailCustomerService {
   }
 
   async getById(userId: string, id: string): Promise<EmailCustomerEntity> {
-    const found = await this.repo.findFirst({ where: { id, userId } });
+    const found = await this.repo.findFirst({
+      where: { id, userId },
+      include: GROUPS_SELECT, // ✅
+    });
     if (!found) throw new NotFoundException('Email customer not found');
     return this.toEntity(found);
   }
 
-  async create(userId: string, dto: CreateEmailCustomerDto): Promise<EmailCustomerEntity> {
+  async create(
+    userId: string,
+    dto: CreateEmailCustomerDto,
+  ): Promise<EmailCustomerEntity> {
+    const email = this.normalizeEmail(dto.email);
+    if (!email) throw new BadRequestException('Email is required');
+
     try {
-      const created = await this.repo.create({
+      const created = await this.repo.createWithGroups({
+        userId,
+        groupIds: dto.groupIds,
         data: {
-          email: dto.email,
+          email,
           name: dto.name,
           phone: dto.phone,
           company: dto.company,
           notes: dto.notes,
           isPublic: dto.isPublic ?? false,
-          userId,
-          statusId: STATUS_ACTIVE,
         },
       });
+
       return this.toEntity(created);
     } catch (e: any) {
-      // Nếu bạn bật @@unique([userId,email]) thì sẽ dính P2002
-      if (e?.code === 'P2002') {
+      if (e?.code === 'P2002')
         throw new BadRequestException('Email already exists for this owner');
-      }
+      if (String(e?.message || '').includes('groupIds'))
+        throw new BadRequestException(e.message);
       throw e;
     }
   }
 
-  async update(userId: string, id: string, dto: UpdateEmailCustomerDto): Promise<EmailCustomerEntity> {
-    await this.getById(userId, id);
+  async update(
+    userId: string,
+    id: string,
+    dto: UpdateEmailCustomerDto,
+  ): Promise<EmailCustomerEntity> {
+    const data: Prisma.EmailCustomerUpdateManyMutationInput = {
+      ...(dto.email !== undefined
+        ? { email: this.normalizeEmail(dto.email) }
+        : {}),
+      ...(dto.name !== undefined ? { name: dto.name } : {}),
+      ...(dto.phone !== undefined ? { phone: dto.phone } : {}),
+      ...(dto.company !== undefined ? { company: dto.company } : {}),
+      ...(dto.notes !== undefined ? { notes: dto.notes } : {}),
+      ...(dto.isPublic !== undefined ? { isPublic: dto.isPublic } : {}),
+    };
 
     try {
-      const updated = await this.repo.update({
-        where: { id },
-        data: {
-          ...(dto.email !== undefined ? { email: dto.email } : {}),
-          ...(dto.name !== undefined ? { name: dto.name } : {}),
-          ...(dto.phone !== undefined ? { phone: dto.phone } : {}),
-          ...(dto.company !== undefined ? { company: dto.company } : {}),
-          ...(dto.notes !== undefined ? { notes: dto.notes } : {}),
-          ...(dto.isPublic !== undefined ? { isPublic: dto.isPublic } : {}),
-        },
+      const res = await this.repo.updateMany({ where: { id, userId }, data });
+      if (res.count === 0)
+        throw new NotFoundException('Email customer not found');
+
+      const found = await this.repo.findFirst({
+        where: { id, userId },
+        include: GROUPS_SELECT, // ✅
+      });
+      if (!found) throw new NotFoundException('Email customer not found');
+
+      return this.toEntity(found);
+    } catch (e: any) {
+      if (e?.code === 'P2002')
+        throw new BadRequestException('Email already exists for this owner');
+      throw e;
+    }
+  }
+
+  async replaceGroups(
+    userId: string,
+    id: string,
+    groupIds: string[],
+  ): Promise<EmailCustomerEntity> {
+    try {
+      const updated = await this.repo.replaceGroups({
+        userId,
+        customerId: id,
+        groupIds,
       });
       return this.toEntity(updated);
     } catch (e: any) {
-      if (e?.code === 'P2002') {
-        throw new BadRequestException('Email already exists for this owner');
-      }
+      if (String(e?.message || '').includes('not found'))
+        throw new NotFoundException('Email customer not found');
+      if (String(e?.message || '').includes('groupIds'))
+        throw new BadRequestException(e.message);
       throw e;
     }
   }
 
   async softDelete(userId: string, id: string): Promise<void> {
-    await this.getById(userId, id);
-    await this.repo.update({ where: { id }, data: { statusId: STATUS_DISABLED } });
+    const res = await this.repo.updateMany({
+      where: { id, userId },
+      data: { statusId: STATUS_DISABLED },
+    });
+    if (res.count === 0)
+      throw new NotFoundException('Email customer not found');
   }
 
-  async setStatus(userId: string, id: string, dto: SetEmailCustomerStatusDto): Promise<EmailCustomerEntity> {
-    await this.getById(userId, id);
-    const updated = await this.repo.update({ where: { id }, data: { statusId: dto.statusId } });
-    return this.toEntity(updated);
+  async setStatus(
+    userId: string,
+    id: string,
+    dto: SetEmailCustomerStatusDto,
+  ): Promise<EmailCustomerEntity> {
+    const res = await this.repo.updateMany({
+      where: { id, userId },
+      data: { statusId: dto.statusId },
+    });
+    if (res.count === 0)
+      throw new NotFoundException('Email customer not found');
+
+    const found = await this.repo.findFirst({
+      where: { id, userId },
+      include: GROUPS_SELECT, // ✅
+    });
+    if (!found) throw new NotFoundException('Email customer not found');
+
+    return this.toEntity(found);
   }
 }

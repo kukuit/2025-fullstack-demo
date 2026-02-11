@@ -13,6 +13,8 @@ import { EmailTemplateModule } from './modules/admin/email-template/email-templa
 import { FilesModule } from './modules/files/files.module';
 import { CustomersModule } from './modules/admin/customers/customers.module';
 import { EmailGroupModule } from './modules/admin/email-group/email-group.module';
+import { EmailCustomerModule } from './modules/admin/email-customer/email-customer.module';
+import { EmailCampaignModule } from './modules/admin/email-campaign/email-campaign.module';
 
 @Module({
   imports: [
@@ -36,7 +38,9 @@ import { EmailGroupModule } from './modules/admin/email-group/email-group.module
     EmailTemplateModule,
     FilesModule,
     CustomersModule,
-    EmailGroupModule
+    EmailGroupModule,
+    EmailCustomerModule,
+    EmailCampaignModule,
   ],
   providers: [
     {
